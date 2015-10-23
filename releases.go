@@ -10,6 +10,7 @@ import (
 
 const (
 	RELEASE_LIST_URI    = "/repos/%s/%s/releases%s"
+	RELEASE_LATEST_URI  = "/repos/%s/%s/releases/latest%s"
 	RELEASE_DATE_FORMAT = "02/01/2006 at 15:04"
 )
 
@@ -76,6 +77,43 @@ func Releases(user, repo, token string) ([]Release, error) {
 	}
 
 	return releases, nil
+}
+
+func latestReleaseApi(user, repo, token string) (*Release, error) {
+	if token != "" {
+		token = "?access_token=" + token
+	}
+	var release Release
+	return &release, GithubGet(fmt.Sprintf(RELEASE_LATEST_URI, user, repo, token), &release)
+}
+
+func LatestRelease(user, repo, token string) (*Release, error) {
+	// If latestReleaseApi DOESN'T give an error, return the release.
+	if latestRelease, err := latestReleaseApi(user, repo, token); err == nil {
+		return latestRelease, nil
+	}
+
+	// The enterprise api doesnt support the latest release endpoint. Get
+	// all releases and compare the published date to get the latest.
+	releases, err := Releases(user, repo, token)
+	if err != nil {
+		return nil, err
+	}
+
+	var latestRelIndex = -1
+	maxDate := time.Time{}
+	for i, release := range releases {
+		if relDate := *release.Published; relDate.After(maxDate) {
+			maxDate = relDate
+			latestRelIndex = i
+		}
+	}
+	if latestRelIndex == -1 {
+		return nil, fmt.Errorf("could not find the latest release")
+	}
+
+	vprintln("Scanning ", len(releases), "releases, latest release is", releases[latestRelIndex])
+	return &releases[latestRelIndex], nil
 }
 
 func ReleaseOfTag(user, repo, tag, token string) (*Release, error) {
